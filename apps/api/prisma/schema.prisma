@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum GlobalRole {
+  SUPER_ADMIN
+  PLATFORM_ADMIN
+  PUBLISHER
+  READER
+}
+
+enum JournalRole {
+  JOURNAL_MANAGER
+  EDITOR_IN_CHIEF
+  SECTION_EDITOR
+  TECHNICAL_EDITOR
+  COPY_EDITOR
+  LAYOUT_EDITOR
+  STATISTICAL_EDITOR
+  REVIEWER
+  AUTHOR
+}
+
+model User {
+  id           String     @id @default(cuid())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  email        String     @unique
+  passwordHash String
+  emailVerified Boolean   @default(false)
+
+  fullName     String?
+  orcid        String?
+  affiliation  String?
+  country      String?
+
+  globalRoles  UserGlobalRole[]
+  journalRoles UserJournalRole[]
+
+  submissions  Submission[] @relation("SubmissionAuthor")
+  handledSubmissions Submission[] @relation("SubmissionHandlingEditor")
+  reviews      Review[]
+}
+
+model UserGlobalRole {
+  userId String
+  role   GlobalRole
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model Journal {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  title       String
+  subdomain   String   @unique
+  defaultLang String   @default("en")
+
+  description String?
+  websiteUrl  String?
+  contactEmail String?
+  contactPhone String?
+  contactAddress String?
+
+  aimScope    String?
+  guidelines  String?
+  ethicalPolicy String?
+  publicationPolicy String?
+  pricingPolicy String?
+
+  journalRoles UserJournalRole[]
+  submissions  Submission[]
+  issues       Issue[]
+  pages        JournalPage[]
+}
+
+model UserJournalRole {
+  userId    String
+  journalId String
+  role      JournalRole
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journal   Journal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@id([userId, journalId, role])
+  @@index([journalId, role])
+}
+
+enum SubmissionStatus {
+  NEW_SUBMISSION
+  WITH_EDITOR
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  UNDER_REVISION
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  IN_PRODUCTION
+  READY_FOR_ISSUE
+  PUBLISHED
+}
+
+model Submission {
+  id          String           @id @default(cuid())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  journalId   String
+  journal     Journal          @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  status      SubmissionStatus @default(NEW_SUBMISSION)
+
+  title       String
+  abstract    String
+  keywords    Json
+  language    String
+  articleType String
+  references  String?
+
+  authorId    String
+  author      User             @relation("SubmissionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  handlingEditorId String?
+  handlingEditor   User?       @relation("SubmissionHandlingEditor", fields: [handlingEditorId], references: [id], onDelete: SetNull)
+
+  reviews     Review[]
+  publication Publication?
+}
+
+enum ReviewDecision {
+  ACCEPT
+  MINOR_REVISION
+  MAJOR_REVISION
+  REJECT
+}
+
+model Review {
+  id           String         @id @default(cuid())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  submissionId String
+  submission   Submission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  reviewerId   String
+  reviewer     User           @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  decision     ReviewDecision?
+  commentToEditor String?
+  commentToAuthor String?
+  dueAt        DateTime?
+  submittedAt  DateTime?
+
+  @@index([submissionId])
+  @@index([reviewerId])
+}
+
+model Issue {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  journalId String
+  journal   Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  year      Int
+  volume    Int?
+  number    Int?
+  title     String?
+  description String?
+  coverImageUrl String?
+  publicationDate DateTime?
+  status    String   @default("Draft")
+
+  publications Publication[]
+
+  @@index([journalId, year])
+}
+
+model JournalPage {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  journalId String
+  journal   Journal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  title     String
+  slug      String
+  type      String   @default("custom") // fixed/custom
+  language  String   @default("ru")
+  content   String   @default("")
+  seoTitle  String?
+  seoDescription String?
+  published Boolean  @default(false)
+  showInRightMenu Boolean @default(false)
+  showInTopNav Boolean @default(false)
+  sortOrder Int      @default(0)
+
+  @@unique([journalId, slug, language])
+  @@index([journalId, published])
+}
+
+model Publication {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submissionId String   @unique
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  issueId      String?
+  issue        Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
+
+  doi          String?  @unique
+  nationalId   String   @unique
+
+  publishedAt  DateTime?
+}
+

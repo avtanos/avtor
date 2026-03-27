@@ -1,0 +1,4 @@
+name: jmp
+include:
+  - infra/docker-compose.yml
+
